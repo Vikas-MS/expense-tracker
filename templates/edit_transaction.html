@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+
+{% block title %}Edit Transaction - Personal Expense Tracker{% endblock %}
+
+{% block content %}
+<div class="page">
+    <div class="page-header">
+        <h1>Edit Transaction</h1>
+    </div>
+
+    <div class="card form-card">
+        <form id="editTransactionForm" onsubmit="handleEditTransaction(event)">
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="type">Transaction Type *</label>
+                    <select id="type" name="type" required disabled>
+                        <option value="{{ transaction.transaction_type }}" selected>{{ transaction.transaction_type|title }}</option>
+                    </select>
+                    <small>Transaction type cannot be changed</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="amount">Amount *</label>
+                    <input type="number" id="amount" name="amount" step="0.01" required placeholder="0.00" value="{{ transaction.amount }}">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="category_id">Category *</label>
+                    <select id="category_id" name="category_id" required>
+                        <option value="">Select a category</option>
+                        {% for category in categories %}
+                            {% if category.category_type == transaction.transaction_type %}
+                            <option value="{{ category.id }}" {% if category.id == transaction.category_id %}selected{% endif %}>
+                                {{ category.category_name }}
+                            </option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="transaction_date">Date *</label>
+                    <input type="date" id="transaction_date" name="transaction_date" required value="{{ transaction.transaction_date }}">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="description">Description (Optional)</label>
+                <textarea id="description" name="description" rows="4" placeholder="Add notes about this transaction">{{ transaction.description or '' }}</textarea>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Update Transaction</button>
+                <a href="{{ url_for('transactions.list_transactions') }}" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function handleEditTransaction(event) {
+    event.preventDefault();
+    const formData = new FormData(document.getElementById('editTransactionForm'));
+
+    fetch('{{ url_for("transactions.edit_transaction", transaction_id=transaction.id) }}', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification(data.message, 'success');
+            setTimeout(() => {
+                window.location.href = '{{ url_for("transactions.list_transactions") }}';
+            }, 500);
+        } else {
+            showNotification(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        showNotification('An error occurred', 'error');
+        console.error('Error:', error);
+    });
+}
+</script>
+{% endblock %}

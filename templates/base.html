@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Personal Expense Tracker{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    {% if session.get('user_id') %}
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <h1>💰 Expense Tracker</h1>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="{{ url_for('dashboard.index') }}" class="nav-link">Dashboard</a></li>
+                <li><a href="{{ url_for('transactions.list_transactions') }}" class="nav-link">Transactions</a></li>
+                <li><a href="{{ url_for('transactions.add_transaction') }}" class="nav-link">Add Transaction</a></li>
+                <li><a href="{{ url_for('reports.index') }}" class="nav-link">Reports</a></li>
+                <li><a href="{{ url_for('auth.profile') }}" class="nav-link">Profile</a></li>
+            </ul>
+            <div class="sidebar-footer">
+                <button onclick="logout()" class="logout-btn">Logout</button>
+            </div>
+        </nav>
+        <main class="main-content">
+            <div id="notification" class="notification"></div>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+
+    {% if session.get('user_id') %}
+        </main>
+    {% endif %}
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

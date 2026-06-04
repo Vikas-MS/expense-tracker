@@ -1,0 +1,209 @@
+{% extends 'base.html' %}
+
+{% block title %}Reports & Analytics - Personal Expense Tracker{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.css">
+{% endblock %}
+
+{% block content %}
+<div class="reports-page">
+    <div class="page-header">
+        <h1>Reports & Analytics</h1>
+        <div class="report-actions">
+            <input type="month" id="monthSelect" value="{{ selected_month }}" onchange="updateMonth()">
+            <button onclick="exportReport('all')" class="btn btn-secondary">📥 Export CSV</button>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="summary-cards">
+        <div class="card stat-card income">
+            <div class="card-content">
+                <span class="card-label">Monthly Income</span>
+                <h3 class="card-value">${{ "%.2f"|format(monthly_income) }}</h3>
+            </div>
+        </div>
+
+        <div class="card stat-card expense">
+            <div class="card-content">
+                <span class="card-label">Monthly Expenses</span>
+                <h3 class="card-value">${{ "%.2f"|format(monthly_expenses) }}</h3>
+            </div>
+        </div>
+
+        <div class="card stat-card balance">
+            <div class="card-content">
+                <span class="card-label">Monthly Balance</span>
+                <h3 class="card-value">${{ "%.2f"|format(monthly_balance) }}</h3>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="charts-grid">
+        {% if expense_amounts %}
+        <div class="card">
+            <h3>Expenses by Category</h3>
+            <canvas id="expenseChart"></canvas>
+        </div>
+        {% endif %}
+
+        {% if income_amounts %}
+        <div class="card">
+            <h3>Income by Category</h3>
+            <canvas id="incomeChart"></canvas>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Trend Chart -->
+    <div class="card">
+        <h3>Income vs Expenses - Last 12 Months</h3>
+        <canvas id="trendChart"></canvas>
+    </div>
+
+    <!-- Recent Transactions -->
+    <div class="card">
+        <h3>Recent Transactions This Month</h3>
+        {% if transactions %}
+            <div class="transactions-list">
+                {% for transaction in transactions %}
+                <div class="transaction-item">
+                    <div class="transaction-info">
+                        <span class="transaction-category">{{ transaction.category.category_name }}</span>
+                        {% if transaction.description %}
+                            <span class="transaction-description">{{ transaction.description }}</span>
+                        {% endif %}
+                    </div>
+                    <div class="transaction-date">{{ transaction.transaction_date.strftime('%m/%d/%Y') }}</div>
+                    <div class="transaction-amount {% if transaction.transaction_type == 'income' %}income{% else %}expense{% endif %}">
+                        {% if transaction.transaction_type == 'income' %}+{% else %}-{% endif %} ${{ "%.2f"|format(transaction.amount) }}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="empty-state">No transactions for this month</p>
+        {% endif %}
+    </div>
+
+    <!-- Yearly Report Link -->
+    <div class="card">
+        <a href="{{ url_for('reports.yearly_report') }}" class="btn btn-secondary">📊 View Yearly Report</a>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+<script>
+function updateMonth() {
+    const month = document.getElementById('monthSelect').value;
+    window.location.href = `{{ url_for('reports.index') }}?month=${month}`;
+}
+
+function exportReport(type) {
+    const month = document.getElementById('monthSelect').value;
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '{{ url_for("reports.export_csv") }}';
+
+    const typeInput = document.createElement('input');
+    typeInput.type = 'hidden';
+    typeInput.name = 'type';
+    typeInput.value = type;
+
+    const monthInput = document.createElement('input');
+    monthInput.type = 'hidden';
+    monthInput.name = 'month';
+    monthInput.value = month;
+
+    form.appendChild(typeInput);
+    form.appendChild(monthInput);
+    document.body.appendChild(form);
+    form.submit();
+    document.body.removeChild(form);
+}
+
+// Expense Chart
+const expenseCtx = document.getElementById('expenseChart');
+if (expenseCtx) {
+    new Chart(expenseCtx, {
+        type: 'doughnut',
+        data: {
+            labels: {{ expense_categories|tojson }},
+            datasets: [{
+                data: {{ expense_amounts|tojson }},
+                backgroundColor: {{ expense_colors|tojson }}
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: 'bottom' }
+            }
+        }
+    });
+}
+
+// Income Chart
+const incomeCtx = document.getElementById('incomeChart');
+if (incomeCtx) {
+    new Chart(incomeCtx, {
+        type: 'doughnut',
+        data: {
+            labels: {{ income_categories|tojson }},
+            datasets: [{
+                data: {{ income_amounts|tojson }},
+                backgroundColor: {{ income_colors|tojson }}
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: 'bottom' }
+            }
+        }
+    });
+}
+
+// Trend Chart
+const trendCtx = document.getElementById('trendChart');
+if (trendCtx) {
+    const months = {{ months_data|tojson }};
+    new Chart(trendCtx, {
+        type: 'line',
+        data: {
+            labels: months.map(m => m.month),
+            datasets: [
+                {
+                    label: 'Income',
+                    data: months.map(m => m.income),
+                    borderColor: '#27ae60',
+                    backgroundColor: 'rgba(39, 174, 96, 0.1)',
+                    tension: 0.4
+                },
+                {
+                    label: 'Expenses',
+                    data: months.map(m => m.expenses),
+                    borderColor: '#e74c3c',
+                    backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                    tension: 0.4
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: 'bottom' }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { callback: value => '$' + value }
+                }
+            }
+        }
+    });
+}
+</script>
+{% endblock %}

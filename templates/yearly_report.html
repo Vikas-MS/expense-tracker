@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+
+{% block title %}Yearly Report - Personal Expense Tracker{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.css">
+{% endblock %}
+
+{% block content %}
+<div class="reports-page">
+    <div class="page-header">
+        <h1>Yearly Summary</h1>
+        <div class="report-actions">
+            <select id="yearSelect" onchange="updateYear()">
+                {% for year in range(2020, 2031) %}
+                    <option value="{{ year }}" {% if year == selected_year %}selected{% endif %}>{{ year }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="summary-cards">
+        <div class="card stat-card income">
+            <div class="card-content">
+                <span class="card-label">Yearly Income</span>
+                <h3 class="card-value">${{ "%.2f"|format(yearly_income) }}</h3>
+            </div>
+        </div>
+
+        <div class="card stat-card expense">
+            <div class="card-content">
+                <span class="card-label">Yearly Expenses</span>
+                <h3 class="card-value">${{ "%.2f"|format(yearly_expenses) }}</h3>
+            </div>
+        </div>
+
+        <div class="card stat-card balance">
+            <div class="card-content">
+                <span class="card-label">Yearly Balance</span>
+                <h3 class="card-value">${{ "%.2f"|format(yearly_balance) }}</h3>
+            </div>
+        </div>
+    </div>
+
+    <!-- Monthly Breakdown Chart -->
+    <div class="card">
+        <h3>Monthly Breakdown</h3>
+        <canvas id="monthlyChart"></canvas>
+    </div>
+
+    <!-- Monthly Details Table -->
+    <div class="card">
+        <h3>Monthly Details</h3>
+        <div class="transactions-table">
+            <div class="table-header">
+                <div class="col col-month">Month</div>
+                <div class="col col-income">Income</div>
+                <div class="col col-expense">Expenses</div>
+                <div class="col col-balance">Balance</div>
+            </div>
+
+            {% for month in monthly_breakdown %}
+            <div class="table-row">
+                <div class="col col-month">{{ month.month }}</div>
+                <div class="col col-income text-income">${{ "%.2f"|format(month.income) }}</div>
+                <div class="col col-expense text-expense">${{ "%.2f"|format(month.expenses) }}</div>
+                <div class="col col-balance {% if month.balance >= 0 %}text-income{% else %}text-expense{% endif %}">
+                    ${{ "%.2f"|format(month.balance) }}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="card">
+        <a href="{{ url_for('reports.index') }}" class="btn btn-secondary">← Back to Monthly Reports</a>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+<script>
+function updateYear() {
+    const year = document.getElementById('yearSelect').value;
+    window.location.href = `{{ url_for('reports.yearly_report') }}?year=${year}`;
+}
+
+const monthlyData = {{ monthly_breakdown|tojson }};
+const monthlyCtx = document.getElementById('monthlyChart');
+if (monthlyCtx) {
+    new Chart(monthlyCtx, {
+        type: 'bar',
+        data: {
+            labels: monthlyData.map(m => m.month),
+            datasets: [
+                {
+                    label: 'Income',
+                    data: monthlyData.map(m => m.income),
+                    backgroundColor: '#27ae60'
+                },
+                {
+                    label: 'Expenses',
+                    data: monthlyData.map(m => m.expenses),
+                    backgroundColor: '#e74c3c'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: 'bottom' }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { callback: value => '$' + value }
+                }
+            }
+        }
+    });
+}
+</script>
+{% endblock %}

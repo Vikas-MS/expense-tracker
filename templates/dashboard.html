@@ -1,0 +1,196 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - Personal Expense Tracker{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.css">
+{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+    <div class="dashboard-header">
+        <h1>Dashboard</h1>
+        <p>{{ today }}</p>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="summary-cards">
+        <div class="card stat-card income">
+            <div class="card-icon">📈</div>
+            <div class="card-content">
+                <span class="card-label">Total Income</span>
+                <h3 class="card-value">${{ "%.2f"|format(total_income) }}</h3>
+                <small>This month: ${{ "%.2f"|format(monthly_income) }}</small>
+            </div>
+        </div>
+
+        <div class="card stat-card expense">
+            <div class="card-icon">📉</div>
+            <div class="card-content">
+                <span class="card-label">Total Expenses</span>
+                <h3 class="card-value">${{ "%.2f"|format(total_expenses) }}</h3>
+                <small>This month: ${{ "%.2f"|format(monthly_expenses) }}</small>
+            </div>
+        </div>
+
+        <div class="card stat-card balance">
+            <div class="card-icon">💳</div>
+            <div class="card-content">
+                <span class="card-label">Current Balance</span>
+                <h3 class="card-value">${{ "%.2f"|format(balance) }}</h3>
+                <small>Monthly balance: ${{ "%.2f"|format(monthly_balance) }}</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Section -->
+    <div class="dashboard-charts">
+        <div class="card">
+            <h3>Expenses by Category (This Month)</h3>
+            <canvas id="categoryChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Recent Transactions -->
+    <div class="card">
+        <div class="section-header">
+            <h3>Recent Transactions</h3>
+            <a href="{{ url_for('transactions.list_transactions') }}" class="link">View all</a>
+        </div>
+
+        {% if recent_transactions %}
+            <div class="transactions-list">
+                {% for transaction in recent_transactions %}
+                <div class="transaction-item">
+                    <div class="transaction-info">
+                        <span class="transaction-category">{{ transaction.category.category_name }}</span>
+                        {% if transaction.description %}
+                            <span class="transaction-description">{{ transaction.description }}</span>
+                        {% endif %}
+                    </div>
+                    <div class="transaction-date">{{ transaction.transaction_date.strftime('%m/%d/%Y') }}</div>
+                    <div class="transaction-amount {% if transaction.transaction_type == 'income' %}income{% else %}expense{% endif %}">
+                        {% if transaction.transaction_type == 'income' %}+{% else %}-{% endif %} ${{ "%.2f"|format(transaction.amount) }}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="empty-state">
+                <p>No transactions yet. <a href="{{ url_for('transactions.add_transaction') }}">Add your first transaction</a></p>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Quick Add Button -->
+    <div class="quick-add">
+        <button onclick="showQuickAddModal()" class="btn btn-primary">+ Quick Add Expense</button>
+    </div>
+</div>
+
+<!-- Quick Add Modal -->
+<div id="quickAddModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeQuickAddModal()">&times;</span>
+        <h2>Quick Add Transaction</h2>
+
+        <form id="quickAddForm" onsubmit="handleQuickAdd(event)">
+            <div class="form-group">
+                <label for="qAmount">Amount</label>
+                <input type="number" id="qAmount" step="0.01" required placeholder="0.00">
+            </div>
+
+            <div class="form-group">
+                <label for="qCategory">Category</label>
+                <select id="qCategory" required>
+                    <option value="">Select a category</option>
+                    {% for category in expenses_by_category %}
+                        {% if category[0] %}
+                        <option value="{{ category[2] }}">{{ category[0] }}</option>
+                        {% endif %}
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="qDescription">Description (Optional)</label>
+                <input type="text" id="qDescription" placeholder="Add a note">
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-block">Add Transaction</button>
+        </form>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+<script>
+// Initialize expense category chart
+const expensesByCategory = {{ expenses_by_category|tojson }};
+if (expensesByCategory && expensesByCategory.length > 0) {
+    const ctx = document.getElementById('categoryChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: expensesByCategory.map(item => item[0]),
+            datasets: [{
+                data: expensesByCategory.map(item => item[1]),
+                backgroundColor: ['#e74c3c', '#3498db', '#9b59b6', '#f39c12', '#1abc9c', '#27ae60', '#2c3e50', '#95a5a6']
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: { position: 'bottom' }
+            }
+        }
+    });
+}
+
+function showQuickAddModal() {
+    document.getElementById('quickAddModal').style.display = 'block';
+}
+
+function closeQuickAddModal() {
+    document.getElementById('quickAddModal').style.display = 'none';
+    document.getElementById('quickAddForm').reset();
+}
+
+function handleQuickAdd(event) {
+    event.preventDefault();
+
+    const data = {
+        amount: document.getElementById('qAmount').value,
+        category_id: document.getElementById('qCategory').value,
+        description: document.getElementById('qDescription').value
+    };
+
+    fetch('{{ url_for("api.quick_add_transaction") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification(data.message, 'success');
+            closeQuickAddModal();
+            setTimeout(() => location.reload(), 500);
+        } else {
+            showNotification(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        showNotification('An error occurred', 'error');
+        console.error('Error:', error);
+    });
+}
+
+window.onclick = function(event) {
+    const modal = document.getElementById('quickAddModal');
+    if (event.target === modal) {
+        closeQuickAddModal();
+    }
+}
+</script>
+{% endblock %}

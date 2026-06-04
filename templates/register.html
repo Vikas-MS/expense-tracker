@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+
+{% block title %}Register - Personal Expense Tracker{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-box">
+        <div class="auth-header">
+            <h1>💰 Create Account</h1>
+            <p>Join us to manage your finances</p>
+        </div>
+
+        <div id="notification" class="notification" style="display:none;"></div>
+
+        <form id="registerForm" onsubmit="handleRegister(event)">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required placeholder="Choose a username" minlength="3">
+            </div>
+
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" required placeholder="Enter your email">
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required placeholder="Create a strong password" minlength="8">
+                <small>At least 8 characters</small>
+            </div>
+
+            <div class="form-group">
+                <label for="confirm_password">Confirm Password</label>
+                <input type="password" id="confirm_password" name="confirm_password" required placeholder="Confirm your password" minlength="8">
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-block">Create Account</button>
+        </form>
+
+        <div class="auth-footer">
+            <p>Already have an account? <a href="{{ url_for('auth.login') }}">Sign in here</a></p>
+            <a href="{{ url_for('auth.landing') }}">Back to home</a>
+        </div>
+    </div>
+</div>
+
+<script>
+function handleRegister(event) {
+    event.preventDefault();
+    const formData = new FormData(document.getElementById('registerForm'));
+    const data = {
+        username: formData.get('username'),
+        email: formData.get('email'),
+        password: formData.get('password'),
+        confirm_password: formData.get('confirm_password')
+    };
+
+    console.log('Submitting:', data);
+
+    fetch('{{ url_for("auth.register") }}', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => {
+        console.log('Status:', response.status);
+        return response.json().then(data => ({ status: response.status, data }));
+    })
+    .then(({ status, data }) => {
+        console.log('Response:', data);
+        if (status === 201 || data.success) {
+            console.log('SUCCESS! Showing notification...');
+            document.getElementById('notification').textContent = 'Account created! Redirecting to login...';
+            document.getElementById('notification').style.display = 'block';
+            document.getElementById('notification').className = 'notification success';
+
+            setTimeout(() => {
+                window.location.href = '{{ url_for("auth.login") }}';
+            }, 2000);
+        } else {
+            console.log('FAILED:', data.error);
+            document.getElementById('notification').textContent = data.error || 'Registration failed';
+            document.getElementById('notification').style.display = 'block';
+            document.getElementById('notification').className = 'notification error';
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        document.getElementById('notification').textContent = 'An error occurred';
+        document.getElementById('notification').style.display = 'block';
+        document.getElementById('notification').className = 'notification error';
+    });
+}
+</script>
+{% endblock %}

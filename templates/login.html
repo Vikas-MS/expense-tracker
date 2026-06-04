@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+
+{% block title %}Login - Personal Expense Tracker{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-box">
+        <div class="auth-header">
+            <h1>💰 Login</h1>
+            <p>Access your expense tracker</p>
+        </div>
+
+        <form id="loginForm" onsubmit="handleLogin(event)">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required placeholder="Enter your username">
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required placeholder="Enter your password">
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-block">Sign In</button>
+        </form>
+
+        <div class="auth-footer">
+            <p>Don't have an account? <a href="{{ url_for('auth.register') }}">Register here</a></p>
+            <a href="{{ url_for('auth.landing') }}">Back to home</a>
+        </div>
+    </div>
+</div>
+
+<script>
+function handleLogin(event) {
+    event.preventDefault();
+    const formData = new FormData(document.getElementById('loginForm'));
+
+    fetch('{{ url_for("auth.login") }}', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification(data.message, 'success');
+            setTimeout(() => {
+                window.location.href = '{{ url_for("dashboard.index") }}';
+            }, 500);
+        } else {
+            showNotification(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        showNotification('An error occurred', 'error');
+        console.error('Error:', error);
+    });
+}
+</script>
+{% endblock %}

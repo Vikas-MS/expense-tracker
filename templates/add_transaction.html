@@ -1,0 +1,114 @@
+{% extends 'base.html' %}
+
+{% block title %}Add Transaction - Personal Expense Tracker{% endblock %}
+
+{% block content %}
+<div class="page">
+    <div class="page-header">
+        <h1>Add Transaction</h1>
+    </div>
+
+    <div class="card form-card">
+        <form id="addTransactionForm" onsubmit="handleAddTransaction(event)">
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="type">Transaction Type *</label>
+                    <select id="type" name="type" required onchange="updateCategories()">
+                        <option value="">Select type</option>
+                        <option value="expense">Expense</option>
+                        <option value="income">Income</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="amount">Amount *</label>
+                    <input type="number" id="amount" name="amount" step="0.01" required placeholder="0.00">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="category_id">Category *</label>
+                    <select id="category_id" name="category_id" required>
+                        <option value="">Select a category</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="transaction_date">Date *</label>
+                    <input type="date" id="transaction_date" name="transaction_date" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="description">Description (Optional)</label>
+                <textarea id="description" name="description" rows="4" placeholder="Add notes about this transaction"></textarea>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Add Transaction</button>
+                <a href="{{ url_for('transactions.list_transactions') }}" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+// Set today's date as default
+document.getElementById('transaction_date').valueAsDate = new Date();
+
+// Create categories map from template
+const categoriesData = {
+    expense: [
+        {% for cat in categories if cat.category_type == 'expense' %}
+            { id: '{{ cat.id }}', name: '{{ cat.category_name }}' }{{ ',' if not loop.last }}
+        {% endfor %}
+    ],
+    income: [
+        {% for cat in categories if cat.category_type == 'income' %}
+            { id: '{{ cat.id }}', name: '{{ cat.category_name }}' }{{ ',' if not loop.last }}
+        {% endfor %}
+    ]
+};
+
+function updateCategories() {
+    const type = document.getElementById('type').value;
+    const categorySelect = document.getElementById('category_id');
+    categorySelect.innerHTML = '<option value="">Select a category</option>';
+
+    if (type && categoriesData[type]) {
+        categoriesData[type].forEach(cat => {
+            const option = document.createElement('option');
+            option.value = cat.id;
+            option.textContent = cat.name;
+            categorySelect.appendChild(option);
+        });
+    }
+}
+
+function handleAddTransaction(event) {
+    event.preventDefault();
+    const formData = new FormData(document.getElementById('addTransactionForm'));
+
+    fetch('{{ url_for("transactions.add_transaction") }}', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification(data.message, 'success');
+            setTimeout(() => {
+                window.location.href = '{{ url_for("transactions.list_transactions") }}';
+            }, 500);
+        } else {
+            showNotification(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        showNotification('An error occurred', 'error');
+        console.error('Error:', error);
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+
+{% block title %}Welcome - Personal Expense Tracker{% endblock %}
+
+{% block content %}
+<div class="landing">
+    <div class="landing-container">
+        <div class="landing-content">
+            <h1>💰 Personal Expense Tracker</h1>
+            <p class="subtitle">Manage your finances effortlessly</p>
+            <p class="description">
+                Track your income and expenses, analyze spending patterns,
+                and take control of your financial future.
+            </p>
+
+            <div class="landing-features">
+                <div class="feature">
+                    <span class="feature-icon">📊</span>
+                    <h3>Beautiful Analytics</h3>
+                    <p>Visualize your spending with interactive charts</p>
+                </div>
+                <div class="feature">
+                    <span class="feature-icon">🏷️</span>
+                    <h3>Smart Categories</h3>
+                    <p>Organize transactions with custom categories</p>
+                </div>
+                <div class="feature">
+                    <span class="feature-icon">📱</span>
+                    <h3>Responsive Design</h3>
+                    <p>Access from any device, anytime, anywhere</p>
+                </div>
+                <div class="feature">
+                    <span class="feature-icon">📥</span>
+                    <h3>Export Reports</h3>
+                    <p>Download your financial data as CSV</p>
+                </div>
+            </div>
+
+            <div class="landing-buttons">
+                <a href="{{ url_for('auth.register') }}" class="btn btn-primary">Get Started</a>
+                <a href="{{ url_for('auth.login') }}" class="btn btn-secondary">Sign In</a>
+            </div>
+        </div>
+
+        <div class="landing-image">
+            <div class="dashboard-preview">
+                <div class="card">
+                    <div class="stat">
+                        <span>Total Balance</span>
+                        <p>$5,234.50</p>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="stat">
+                        <span>This Month</span>
+                        <p>Income: $4,500</p>
+                        <p>Expenses: $2,100</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
