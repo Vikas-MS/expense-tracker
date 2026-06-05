@@ -2,6 +2,78 @@
 
 {% block title %}Add Transaction - Personal Expense Tracker{% endblock %}
 
+{% block extra_css %}
+<style>
+.category-input-wrapper {
+    position: relative;
+}
+
+#category_search {
+    width: 100%;
+}
+
+.suggestions-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    max-height: 220px;
+    overflow-y: auto;
+    z-index: 200;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+}
+
+.suggestions-dropdown.hidden {
+    display: none;
+}
+
+.suggestion-item {
+    padding: 10px 14px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    border-bottom: 1px solid #f0f0f0;
+    transition: background 0.12s;
+}
+
+.suggestion-item:last-child {
+    border-bottom: none;
+}
+
+.suggestion-item:hover {
+    background: #f5f8ff;
+}
+
+.suggestion-item.create-new {
+    color: #27ae60;
+    font-weight: 500;
+}
+
+.suggestion-item.create-new:hover {
+    background: #f0faf4;
+}
+
+.selected-tag {
+    display: inline-flex;
+    align-items: center;
+    margin-top: 6px;
+    padding: 3px 10px;
+    background: #e8f4fd;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    color: #2980b9;
+}
+
+.selected-tag.new-tag {
+    background: #eafaf1;
+    color: #27ae60;
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="page">
     <div class="page-header">
@@ -13,7 +85,7 @@
             <div class="form-row">
                 <div class="form-group">
                     <label for="type">Transaction Type *</label>
-                    <select id="type" name="type" required onchange="updateCategories()">
+                    <select id="type" name="type" required onchange="onTypeChange()">
                         <option value="">Select type</option>
                         <option value="expense">Expense</option>
                         <option value="income">Income</option>
@@ -28,10 +100,14 @@
 
             <div class="form-row">
                 <div class="form-group">
-                    <label for="category_id">Category *</label>
-                    <select id="category_id" name="category_id" required>
-                        <option value="">Select a category</option>
-                    </select>
+                    <label for="category_search">Category *</label>
+                    <div class="category-input-wrapper">
+                        <input type="text" id="category_search" autocomplete="off"
+                               placeholder="Select type first, then search..." disabled>
+                        <div id="category_suggestions" class="suggestions-dropdown hidden"></div>
+                        <input type="hidden" id="category_id" name="category_id">
+                    </div>
+                    <div id="selected_category_display"></div>
                 </div>
 
                 <div class="form-group">
@@ -54,47 +130,184 @@
 </div>
 
 <script>
-// Set today's date as default
 document.getElementById('transaction_date').valueAsDate = new Date();
 
-// Create categories map from template
-const categoriesData = {
-    expense: [
-        {% for cat in categories if cat.category_type == 'expense' %}
-            { id: '{{ cat.id }}', name: '{{ cat.category_name }}' }{{ ',' if not loop.last }}
-        {% endfor %}
-    ],
-    income: [
-        {% for cat in categories if cat.category_type == 'income' %}
-            { id: '{{ cat.id }}', name: '{{ cat.category_name }}' }{{ ',' if not loop.last }}
-        {% endfor %}
-    ]
-};
+let selectedCategory = null;
+let searchTimeout = null;
 
-function updateCategories() {
+function onTypeChange() {
     const type = document.getElementById('type').value;
-    const categorySelect = document.getElementById('category_id');
-    categorySelect.innerHTML = '<option value="">Select a category</option>';
-
-    if (type && categoriesData[type]) {
-        categoriesData[type].forEach(cat => {
-            const option = document.createElement('option');
-            option.value = cat.id;
-            option.textContent = cat.name;
-            categorySelect.appendChild(option);
-        });
+    const searchInput = document.getElementById('category_search');
+    clearCategorySelection();
+    if (type) {
+        searchInput.disabled = false;
+        searchInput.placeholder = 'Type 3+ letters to search...';
+    } else {
+        searchInput.disabled = true;
+        searchInput.placeholder = 'Select type first, then search...';
     }
 }
 
-function handleAddTransaction(event) {
+function clearCategorySelection() {
+    selectedCategory = null;
+    document.getElementById('category_id').value = '';
+    document.getElementById('category_search').value = '';
+    document.getElementById('selected_category_display').innerHTML = '';
+    hideSuggestions();
+}
+
+function hideSuggestions() {
+    const dropdown = document.getElementById('category_suggestions');
+    dropdown.classList.add('hidden');
+    dropdown.innerHTML = '';
+}
+
+function setSelectedCategory(cat) {
+    selectedCategory = cat;
+    document.getElementById('category_id').value = cat.isNew ? '' : cat.id;
+    document.getElementById('category_search').value = cat.name;
+    const display = document.getElementById('selected_category_display');
+    if (cat.isNew) {
+        display.innerHTML = `<span class="selected-tag new-tag">+ New category: ${cat.name}</span>`;
+    } else {
+        display.innerHTML = `<span class="selected-tag">${cat.name}</span>`;
+    }
+    hideSuggestions();
+}
+
+function showSuggestions(categories, query) {
+    const dropdown = document.getElementById('category_suggestions');
+    dropdown.innerHTML = '';
+
+    const lowerQuery = query.toLowerCase();
+    const exactMatch = categories.some(c => c.category_name.toLowerCase() === lowerQuery);
+
+    categories.forEach(cat => {
+        const item = document.createElement('div');
+        item.className = 'suggestion-item';
+        item.textContent = cat.category_name;
+        item.addEventListener('mousedown', e => {
+            e.preventDefault();
+            setSelectedCategory({ id: cat.id, name: cat.category_name, isNew: false });
+        });
+        dropdown.appendChild(item);
+    });
+
+    if (!exactMatch) {
+        const createItem = document.createElement('div');
+        createItem.className = 'suggestion-item create-new';
+        createItem.textContent = `+ Add "${query}" as new category`;
+        createItem.addEventListener('mousedown', e => {
+            e.preventDefault();
+            setSelectedCategory({ id: null, name: query, isNew: true });
+        });
+        dropdown.appendChild(createItem);
+    }
+
+    dropdown.classList.remove('hidden');
+}
+
+document.getElementById('category_search').addEventListener('input', function () {
+    const query = this.value.trim();
+    selectedCategory = null;
+    document.getElementById('category_id').value = '';
+    document.getElementById('selected_category_display').innerHTML = '';
+
+    if (query.length < 3) {
+        hideSuggestions();
+        return;
+    }
+
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+        const type = document.getElementById('type').value;
+        fetch(`/api/categories/search?q=${encodeURIComponent(query)}&type=${encodeURIComponent(type)}`)
+            .then(r => r.json())
+            .then(cats => showSuggestions(cats, query))
+            .catch(() => hideSuggestions());
+    }, 250);
+});
+
+document.getElementById('category_search').addEventListener('blur', () => {
+    setTimeout(hideSuggestions, 150);
+});
+
+async function handleAddTransaction(event) {
     event.preventDefault();
-    const formData = new FormData(document.getElementById('addTransactionForm'));
+
+    const type = document.getElementById('type').value;
+    const amount = document.getElementById('amount').value;
+    const description = document.getElementById('description').value;
+    const transactionDate = document.getElementById('transaction_date').value;
+    const typedText = document.getElementById('category_search').value.trim();
+
+    // User typed a category name but didn't click a suggestion — resolve it now
+    if (!selectedCategory && typedText.length > 0) {
+        try {
+            const searchResp = await fetch(`/api/categories/search?q=${encodeURIComponent(typedText)}&type=${encodeURIComponent(type)}`);
+            const found = await searchResp.json();
+            const exactMatch = found.find(c => c.category_name.toLowerCase() === typedText.toLowerCase());
+            if (exactMatch) {
+                selectedCategory = { id: exactMatch.id, name: exactMatch.category_name, isNew: false };
+            } else {
+                selectedCategory = { id: null, name: typedText, isNew: true };
+            }
+        } catch (err) {
+            selectedCategory = { id: null, name: typedText, isNew: true };
+        }
+    }
+
+    if (!selectedCategory) {
+        showNotification('Please select or enter a category', 'error');
+        document.getElementById('category_search').focus();
+        return;
+    }
+
+    let categoryId = selectedCategory.id;
+
+    if (selectedCategory.isNew) {
+        try {
+            const resp = await fetch('/api/categories', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ category_name: selectedCategory.name, category_type: type })
+            });
+            const data = await resp.json();
+            if (resp.ok) {
+                categoryId = data.id;
+            } else if (resp.status === 409) {
+                // Already exists — find it by searching
+                const searchResp = await fetch(`/api/categories/search?q=${encodeURIComponent(selectedCategory.name)}&type=${encodeURIComponent(type)}`);
+                const found = await searchResp.json();
+                const match = found.find(c => c.category_name.toLowerCase() === selectedCategory.name.toLowerCase());
+                if (match) {
+                    categoryId = match.id;
+                } else {
+                    showNotification('Category conflict, please retry', 'error');
+                    return;
+                }
+            } else {
+                showNotification(data.error || 'Failed to create category', 'error');
+                return;
+            }
+        } catch (err) {
+            showNotification('Failed to create category', 'error');
+            return;
+        }
+    }
+
+    const formData = new FormData();
+    formData.append('amount', amount);
+    formData.append('category_id', categoryId);
+    formData.append('type', type);
+    formData.append('description', description);
+    formData.append('transaction_date', transactionDate);
 
     fetch('{{ url_for("transactions.add_transaction") }}', {
         method: 'POST',
         body: formData
     })
-    .then(response => response.json())
+    .then(r => r.json())
     .then(data => {
         if (data.success) {
             showNotification(data.message, 'success');
@@ -105,10 +318,7 @@ function handleAddTransaction(event) {
             showNotification(data.error, 'error');
         }
     })
-    .catch(error => {
-        showNotification('An error occurred', 'error');
-        console.error('Error:', error);
-    });
+    .catch(() => showNotification('An error occurred', 'error'));
 }
 </script>
 {% endblock %}

@@ -1,8 +1,7 @@
 import os
 from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
 from datetime import timedelta
-from models import db
+import db as database
 
 def create_app(config_name=None):
     """Application factory function."""
@@ -33,8 +32,8 @@ def create_app(config_name=None):
     app.config['JSON_SORT_KEYS'] = False
     app.config['PERMANENT_SESSION'] = True
 
-    # Initialize extensions
-    db.init_app(app)
+    # Initialize DB (SQLAlchemy engine + session)
+    database.init_app(app)
 
     # Register error handlers
     register_error_handlers(app)
@@ -59,8 +58,8 @@ def create_app(config_name=None):
         app.register_blueprint(reports_bp, url_prefix='/reports')
         app.register_blueprint(api_bp, url_prefix='/api')
 
-        # Create tables
-        db.create_all()
+        # Create tables using SQLAlchemy metadata
+        database.create_all()
 
         # Initialize default categories
         init_default_categories()

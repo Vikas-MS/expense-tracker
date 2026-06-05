@@ -1,5 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash, jsonify
-from models import db, User, Category
+from models import User, Category
+from db import get_session
 from functools import wraps
 from datetime import datetime
 
@@ -49,19 +50,19 @@ def register():
         if '@' not in email or '.' not in email:
             return jsonify({'error': 'Invalid email format'}), 400
 
-        # Check if user exists
-        if User.query.filter_by(username=username).first():
-            return jsonify({'error': 'Username already exists'}), 400
-
-        if User.query.filter_by(email=email).first():
-            return jsonify({'error': 'Email already exists'}), 400
-
+        db_s = get_session()
         try:
+            if db_s.query(User).filter(User.username == username).first():
+                return jsonify({'error': 'Username already exists'}), 400
+
+            if db_s.query(User).filter(User.email == email).first():
+                return jsonify({'error': 'Email already exists'}), 400
+
             # Create new user
             user = User(username=username, email=email)
             user.set_password(password)
-            db.session.add(user)
-            db.session.commit()
+            db_s.add(user)
+            db_s.commit()
 
             # Create default categories for new user
             default_expense_categories = ['Food', 'Transportation', 'Shopping', 'Bills', 'Healthcare', 'Entertainment', 'Education', 'Other']
@@ -69,6 +70,7 @@ def register():
 
             colors_expense = ['#e74c3c', '#3498db', '#9b59b6', '#f39c12', '#1abc9c', '#27ae60', '#2c3e50', '#95a5a6']
             colors_income = ['#27ae60', '#f39c12', '#2980b9', '#8e44ad']
+
 
             for i, cat_name in enumerate(default_expense_categories):
                 category = Category(
@@ -78,7 +80,12 @@ def register():
                     color=colors_expense[i],
                     is_custom=False
                 )
-                db.session.add(category)
+                # avoid duplicate category names for the same user
+                if not db_s.query(Category).filter(
+                    Category.user_id == user.id,
+                    Category.category_name == cat_name
+                ).first():
+                    db_s.add(category)
 
             for i, cat_name in enumerate(default_income_categories):
                 category = Category(
@@ -88,15 +95,22 @@ def register():
                     color=colors_income[i],
                     is_custom=False
                 )
-                db.session.add(category)
+                # avoid duplicate category names for the same user
+                if not db_s.query(Category).filter(
+                    Category.user_id == user.id,
+                    Category.category_name == cat_name
+                ).first():
+                    db_s.add(category)
 
-            db.session.commit()
+            db_s.commit()
 
             return jsonify({'success': True, 'message': 'Registration successful! Please login.'}), 201
 
         except Exception as e:
-            db.session.rollback()
+            db_s.rollback()
             return jsonify({'error': f'Registration failed: {str(e)}'}), 500
+        finally:
+            db_s.close()
 
     return render_template('register.html')
 
@@ -111,10 +125,14 @@ def login():
         if not username or not password:
             return jsonify({'error': 'Username and password are required'}), 400
 
-        user = User.query.filter_by(username=username).first()
+        db_s = get_session()
+        try:
+            user = db_s.query(User).filter(User.username == username).first()
 
-        if not user or not user.check_password(password):
-            return jsonify({'error': 'Invalid username or password'}), 401
+            if not user or not user.check_password(password):
+                return jsonify({'error': 'Invalid username or password'}), 401
+        finally:
+            db_s.close()
 
         session.permanent = True
         session['user_id'] = user.id
@@ -138,17 +156,20 @@ def logout():
 @login_required
 def profile():
     """User profile page."""
-    user = User.query.get(session['user_id'])
-    if not user:
-        return redirect(url_for('auth.login'))
+    session_db = get_session()
+    try:
+        user = session_db.get(User, session['user_id'])
+        if not user:
+            return redirect(url_for('auth.login'))
 
-    user_data = {
-        'username': user.username,
-        'email': user.email,
-        'created_at': user.created_at.strftime('%B %d, %Y'),
-        'total_income': user.get_total_income(),
-        'total_expenses': user.get_total_expenses(),
-        'balance': user.get_balance()
-    }
-
+        user_data = {
+            'username': user.username,
+            'email': user.email,
+            'created_at': user.created_at.strftime('%B %d, %Y'),
+            'total_income': user.get_total_income(),
+            'total_expenses': user.get_total_expenses(),
+            'balance': user.get_balance()
+        }
+    finally:
+        session_db.close()
     return render_template('profile.html', user=user_data)

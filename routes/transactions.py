@@ -1,7 +1,9 @@
 from flask import Blueprint, render_template, request, redirect, url_for, session, jsonify
-from models import db, User, Transaction, Category
+from models import User, Transaction, Category
+from db import get_session
 from datetime import datetime
 from functools import wraps
+import math
 
 transactions_bp = Blueprint('transactions', __name__)
 
@@ -20,40 +22,74 @@ def login_required(f):
 @login_required
 def list_transactions():
     """List all transactions."""
-    user = User.query.get(session['user_id'])
-    if not user:
-        return redirect(url_for('auth.login'))
+    db_s = get_session()
+    try:
+        user = db_s.get(User, session['user_id'])
+        if not user:
+            return redirect(url_for('auth.login'))
 
-    # Get filter parameters
-    transaction_type = request.args.get('type', 'all')
-    category_id = request.args.get('category', '')
-    page = request.args.get('page', 1, type=int)
-    per_page = 20
+        # Get filter parameters
+        transaction_type = request.args.get('type', 'all')
+        category_id = request.args.get('category', '')
+        page = request.args.get('page', 1, type=int)
+        per_page = 20
 
-    query = Transaction.query.filter_by(user_id=user.id)
+        query = db_s.query(Transaction).filter(Transaction.user_id == user.id)
 
-    if transaction_type in ['income', 'expense']:
-        query = query.filter_by(transaction_type=transaction_type)
+        if transaction_type in ['income', 'expense']:
+            query = query.filter(Transaction.transaction_type == transaction_type)
 
-    if category_id:
-        query = query.filter_by(category_id=category_id)
+        if category_id:
+            query = query.filter(Transaction.category_id == category_id)
 
-    # Pagination
-    transactions = query.order_by(
-        Transaction.transaction_date.desc(),
-        Transaction.created_at.desc()
-    ).paginate(page=page, per_page=per_page)
+        # Pagination (manual)
+        total = query.count()
+        items = query.order_by(
+            Transaction.transaction_date.desc(),
+            Transaction.created_at.desc()
+        ).offset((page - 1) * per_page).limit(per_page).all()
 
-    # Get categories for filter
-    categories = Category.query.filter_by(user_id=user.id).all()
+        class Pagination:
+            def __init__(self, items, page, per_page, total):
+                self.items = items
+                self.page = page
+                self.per_page = per_page
+                self.total = total
+                self.pages = max(1, math.ceil(total / per_page))
 
-    return render_template(
-        'transactions.html',
-        transactions=transactions,
-        categories=categories,
-        selected_type=transaction_type,
-        selected_category=category_id
-    )
+            @property
+            def has_prev(self):
+                return self.page > 1
+
+            @property
+            def has_next(self):
+                return self.page < self.pages
+
+            @property
+            def prev_num(self):
+                return self.page - 1 if self.has_prev else None
+
+            @property
+            def next_num(self):
+                return self.page + 1 if self.has_next else None
+
+            def iter_pages(self):
+                return range(1, self.pages + 1)
+
+        transactions = Pagination(items, page, per_page, total)
+
+        # Get categories for filter
+        categories = db_s.query(Category).filter(Category.user_id == user.id).all()
+
+        return render_template(
+            'transactions.html',
+            transactions=transactions,
+            categories=categories,
+            selected_type=transaction_type,
+            selected_category=category_id
+        )
+    finally:
+        db_s.close()
 
 
 @transactions_bp.route('/add', methods=['GET', 'POST'])
@@ -62,8 +98,10 @@ def add_transaction():
     """Add new transaction."""
     if request.method == 'POST':
         try:
-            user = User.query.get(session['user_id'])
+            db_s = get_session()
+            user = db_s.get(User, session['user_id'])
             if not user:
+                db_s.close()
                 return jsonify({'error': 'User not found'}), 404
 
             # Get form data
@@ -88,8 +126,11 @@ def add_transaction():
                 return jsonify({'error': 'Invalid transaction type'}), 400
 
             # Verify category belongs to user
-            category = Category.query.filter_by(id=category_id, user_id=user.id).first()
+            category = db_s.query(Category).filter(
+                Category.id == category_id, Category.user_id == user.id
+            ).first()
             if not category:
+                db_s.close()
                 return jsonify({'error': 'Invalid category'}), 404
 
             # Parse date
@@ -111,24 +152,31 @@ def add_transaction():
                 transaction_date=parsed_date
             )
 
-            db.session.add(transaction)
-            db.session.commit()
+            db_s.add(transaction)
+            db_s.commit()
 
-            return jsonify({
-                'success': True,
-                'message': 'Transaction added successfully',
-                'transaction': transaction.to_dict()
-            }), 201
+            try:
+                return jsonify({
+                    'success': True,
+                    'message': 'Transaction added successfully',
+                    'transaction': transaction.to_dict()
+                }), 201
+            finally:
+                db_s.close()
 
         except Exception as e:
-            db.session.rollback()
+            db_s.rollback()
+            db_s.close()
             return jsonify({'error': f'Error adding transaction: {str(e)}'}), 500
 
-    user = User.query.get(session['user_id'])
+    db_s = get_session()
+    user = db_s.get(User, session['user_id'])
     if not user:
+        db_s.close()
         return redirect(url_for('auth.login'))
 
-    categories = Category.query.filter_by(user_id=user.id).all()
+    categories = db_s.query(Category).filter(Category.user_id == user.id).all()
+    db_s.close()
     return render_template('add_transaction.html', categories=categories)
 
 
@@ -136,12 +184,17 @@ def add_transaction():
 @login_required
 def edit_transaction(transaction_id):
     """Edit transaction."""
-    user = User.query.get(session['user_id'])
+    db_s = get_session()
+    user = db_s.get(User, session['user_id'])
     if not user:
+        db_s.close()
         return redirect(url_for('auth.login'))
 
-    transaction = Transaction.query.filter_by(id=transaction_id, user_id=user.id).first()
+    transaction = db_s.query(Transaction).filter(
+        Transaction.id == transaction_id, Transaction.user_id == user.id
+    ).first()
     if not transaction:
+        db_s.close()
         return redirect(url_for('transactions.list_transactions'))
 
     if request.method == 'POST':
@@ -162,8 +215,11 @@ def edit_transaction(transaction_id):
                 return jsonify({'error': 'Invalid amount'}), 400
 
             # Verify category belongs to user
-            category = Category.query.filter_by(id=category_id, user_id=user.id).first()
+            category = db_s.query(Category).filter(
+                Category.id == category_id, Category.user_id == user.id
+            ).first()
             if not category:
+                db_s.close()
                 return jsonify({'error': 'Invalid category'}), 404
 
             try:
@@ -179,19 +235,25 @@ def edit_transaction(transaction_id):
             transaction.description = description
             transaction.transaction_date = parsed_date
 
-            db.session.commit()
-
-            return jsonify({
-                'success': True,
-                'message': 'Transaction updated successfully',
-                'transaction': transaction.to_dict()
-            }), 200
+            try:
+                db_s.commit()
+                return jsonify({
+                    'success': True,
+                    'message': 'Transaction updated successfully',
+                    'transaction': transaction.to_dict()
+                }), 200
+            except Exception as e:
+                db_s.rollback()
+                return jsonify({'error': f'Error updating transaction: {str(e)}'}), 500
+            finally:
+                db_s.close()
 
         except Exception as e:
-            db.session.rollback()
+            db_s.rollback()
+            db_s.close()
             return jsonify({'error': f'Error updating transaction: {str(e)}'}), 500
-
-    categories = Category.query.filter_by(user_id=user.id).all()
+    categories = db_s.query(Category).filter(Category.user_id == user.id).all()
+    db_s.close()
     return render_template('edit_transaction.html', transaction=transaction, categories=categories)
 
 
@@ -199,18 +261,25 @@ def edit_transaction(transaction_id):
 @login_required
 def delete_transaction(transaction_id):
     """Delete transaction."""
-    user = User.query.get(session['user_id'])
+    db_s = get_session()
+    user = db_s.get(User, session['user_id'])
     if not user:
+        db_s.close()
         return jsonify({'error': 'User not found'}), 404
 
-    transaction = Transaction.query.filter_by(id=transaction_id, user_id=user.id).first()
+    transaction = db_s.query(Transaction).filter(
+        Transaction.id == transaction_id, Transaction.user_id == user.id
+    ).first()
     if not transaction:
+        db_s.close()
         return jsonify({'error': 'Transaction not found'}), 404
 
     try:
-        db.session.delete(transaction)
-        db.session.commit()
+        db_s.delete(transaction)
+        db_s.commit()
         return jsonify({'success': True, 'message': 'Transaction deleted successfully'}), 200
     except Exception as e:
-        db.session.rollback()
+        db_s.rollback()
         return jsonify({'error': f'Error deleting transaction: {str(e)}'}), 500
+    finally:
+        db_s.close()

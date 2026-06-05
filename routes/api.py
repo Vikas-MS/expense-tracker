@@ -1,5 +1,6 @@
 from flask import Blueprint, request, session, jsonify
-from models import db, User, Category, Transaction
+from models import User, Category, Transaction
+from db import get_session
 from datetime import datetime
 from functools import wraps
 
@@ -23,12 +24,40 @@ def get_categories():
     user_id = session['user_id']
     category_type = request.args.get('type', '')
 
-    query = Category.query.filter_by(user_id=user_id)
-    if category_type in ['income', 'expense']:
-        query = query.filter_by(category_type=category_type)
-
-    categories = query.all()
+    session = get_session()
+    try:
+        q = session.query(Category).filter(Category.user_id == user_id)
+        if category_type in ['income', 'expense']:
+            q = q.filter(Category.category_type == category_type)
+        categories = q.all()
+    finally:
+        session.close()
     return jsonify([cat.to_dict() for cat in categories]), 200
+
+
+@api_bp.route('/categories/search', methods=['GET'])
+@token_required
+def search_categories():
+    """Search categories by name (triggers after 3+ chars)."""
+    user_id = session['user_id']
+    q = request.args.get('q', '').strip()
+    category_type = request.args.get('type', '')
+
+    if len(q) < 3:
+        return jsonify([]), 200
+
+    db_s = get_session()
+    try:
+        q_obj = db_s.query(Category).filter(
+            Category.user_id == user_id,
+            Category.category_name.ilike(f'%{q}%')
+        )
+        if category_type in ['income', 'expense']:
+            q_obj = q_obj.filter(Category.category_type == category_type)
+        categories = q_obj.limit(10).all()
+        return jsonify([cat.to_dict() for cat in categories]), 200
+    finally:
+        db_s.close()
 
 
 @api_bp.route('/categories', methods=['POST'])
@@ -54,11 +83,15 @@ def create_category():
     if len(category_name) > 100:
         return jsonify({'error': 'Category name is too long'}), 400
 
-    # Check if category already exists
-    if Category.query.filter_by(user_id=user_id, category_name=category_name).first():
-        return jsonify({'error': 'Category already exists'}), 409
-
+    db_s = get_session()
     try:
+        exists = db_s.query(Category).filter(
+            Category.user_id == user_id,
+            Category.category_name == category_name
+        ).first()
+        if exists:
+            return jsonify({'error': 'Category already exists'}), 409
+
         category = Category(
             user_id=user_id,
             category_name=category_name,
@@ -66,12 +99,14 @@ def create_category():
             color=color,
             is_custom=True
         )
-        db.session.add(category)
-        db.session.commit()
+        db_s.add(category)
+        db_s.commit()
         return jsonify(category.to_dict()), 201
     except Exception as e:
-        db.session.rollback()
+        db_s.rollback()
         return jsonify({'error': f'Error creating category: {str(e)}'}), 500
+    finally:
+        db_s.close()
 
 
 @api_bp.route('/categories/<category_id>', methods=['PUT'])
@@ -79,27 +114,34 @@ def create_category():
 def update_category(category_id):
     """Update category."""
     user_id = session['user_id']
-    category = Category.query.filter_by(id=category_id, user_id=user_id).first()
-
-    if not category:
-        return jsonify({'error': 'Category not found'}), 404
-
-    data = request.get_json()
-    if not data:
-        return jsonify({'error': 'No data provided'}), 400
-
-    if 'category_name' in data:
-        category.category_name = data['category_name'].strip()
-
-    if 'color' in data:
-        category.color = data['color']
-
+    sess = get_session()
     try:
-        db.session.commit()
-        return jsonify(category.to_dict()), 200
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': f'Error updating category: {str(e)}'}), 500
+        category = sess.query(Category).filter(
+            Category.id == category_id,
+            Category.user_id == user_id
+        ).first()
+
+        if not category:
+            return jsonify({'error': 'Category not found'}), 404
+
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+
+        if 'category_name' in data:
+            category.category_name = data['category_name'].strip()
+
+        if 'color' in data:
+            category.color = data['color']
+
+        try:
+            sess.commit()
+            return jsonify(category.to_dict()), 200
+        except Exception as e:
+            sess.rollback()
+            return jsonify({'error': f'Error updating category: {str(e)}'}), 500
+    finally:
+        sess.close()
 
 
 @api_bp.route('/categories/<category_id>', methods=['DELETE'])
@@ -107,25 +149,33 @@ def update_category(category_id):
 def delete_category(category_id):
     """Delete category (only custom categories)."""
     user_id = session['user_id']
-    category = Category.query.filter_by(id=category_id, user_id=user_id).first()
-
-    if not category:
-        return jsonify({'error': 'Category not found'}), 404
-
-    if not category.is_custom:
-        return jsonify({'error': 'Cannot delete default categories'}), 403
-
-    # Check if category has transactions
-    if Transaction.query.filter_by(category_id=category_id).first():
-        return jsonify({'error': 'Cannot delete category with transactions'}), 409
-
+    session = get_session()
     try:
-        db.session.delete(category)
-        db.session.commit()
-        return jsonify({'success': True, 'message': 'Category deleted'}), 200
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': f'Error deleting category: {str(e)}'}), 500
+        category = session.query(Category).filter(
+            Category.id == category_id,
+            Category.user_id == user_id
+        ).first()
+
+        if not category:
+            return jsonify({'error': 'Category not found'}), 404
+
+        if not category.is_custom:
+            return jsonify({'error': 'Cannot delete default categories'}), 403
+
+        # Check if category has transactions
+        has_tx = session.query(Transaction).filter(Transaction.category_id == category_id).first()
+        if has_tx:
+            return jsonify({'error': 'Cannot delete category with transactions'}), 409
+
+        try:
+            session.delete(category)
+            session.commit()
+            return jsonify({'success': True, 'message': 'Category deleted'}), 200
+        except Exception as e:
+            session.rollback()
+            return jsonify({'error': f'Error deleting category: {str(e)}'}), 500
+    finally:
+        session.close()
 
 
 @api_bp.route('/dashboard/stats', methods=['GET'])
@@ -133,16 +183,19 @@ def delete_category(category_id):
 def get_dashboard_stats():
     """Get dashboard statistics."""
     user_id = session['user_id']
-    user = User.query.get(user_id)
+    sess = get_session()
+    try:
+        user = sess.get(User, user_id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
 
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
-
-    return jsonify({
-        'total_income': user.get_total_income(),
-        'total_expenses': user.get_total_expenses(),
-        'balance': user.get_balance()
-    }), 200
+        return jsonify({
+            'total_income': user.get_total_income(),
+            'total_expenses': user.get_total_expenses(),
+            'balance': user.get_balance()
+        }), 200
+    finally:
+        sess.close()
 
 
 @api_bp.route('/dashboard/recent', methods=['GET'])
@@ -152,12 +205,15 @@ def get_recent_transactions():
     user_id = session['user_id']
     limit = request.args.get('limit', 10, type=int)
 
-    transactions = Transaction.query.filter_by(user_id=user_id).order_by(
-        Transaction.transaction_date.desc(),
-        Transaction.created_at.desc()
-    ).limit(limit).all()
-
-    return jsonify([trans.to_dict() for trans in transactions]), 200
+    session = get_session()
+    try:
+        transactions = session.query(Transaction).filter(Transaction.user_id == user_id).order_by(
+            Transaction.transaction_date.desc(),
+            Transaction.created_at.desc()
+        ).limit(limit).all()
+        return jsonify([trans.to_dict() for trans in transactions]), 200
+    finally:
+        session.close()
 
 
 @api_bp.route('/transactions/quick', methods=['POST'])
@@ -165,55 +221,60 @@ def get_recent_transactions():
 def quick_add_transaction():
     """Quick add transaction from dashboard."""
     user_id = session['user_id']
-    user = User.query.get(user_id)
-
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
-
-    data = request.get_json()
-    if not data:
-        return jsonify({'error': 'No data provided'}), 400
-
-    amount = data.get('amount')
-    category_id = data.get('category_id')
-    description = data.get('description', '')
-
-    if not amount or not category_id:
-        return jsonify({'error': 'Amount and category are required'}), 400
-
+    sess = get_session()
     try:
-        amount = float(amount)
-        if amount <= 0:
-            return jsonify({'error': 'Amount must be greater than 0'}), 400
-    except (ValueError, TypeError):
-        return jsonify({'error': 'Invalid amount'}), 400
+        user = sess.get(User, user_id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
 
-    # Verify category
-    category = Category.query.filter_by(id=category_id, user_id=user_id).first()
-    if not category:
-        return jsonify({'error': 'Category not found'}), 404
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
 
-    try:
-        transaction = Transaction(
-            user_id=user_id,
-            category_id=category_id,
-            amount=amount,
-            transaction_type=category.category_type,
-            description=description,
-            transaction_date=datetime.now().date()
-        )
-        db.session.add(transaction)
-        db.session.commit()
+        amount = data.get('amount')
+        category_id = data.get('category_id')
+        description = data.get('description', '')
 
-        return jsonify({
-            'success': True,
-            'message': 'Transaction added',
-            'transaction': transaction.to_dict()
-        }), 201
+        if not amount or not category_id:
+            return jsonify({'error': 'Amount and category are required'}), 400
 
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': f'Error adding transaction: {str(e)}'}), 500
+        try:
+            amount = float(amount)
+            if amount <= 0:
+                return jsonify({'error': 'Amount must be greater than 0'}), 400
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Invalid amount'}), 400
+
+        # Verify category
+        category = sess.query(Category).filter(
+            Category.id == category_id, Category.user_id == user_id
+        ).first()
+        if not category:
+            return jsonify({'error': 'Category not found'}), 404
+
+        try:
+            transaction = Transaction(
+                user_id=user_id,
+                category_id=category_id,
+                amount=amount,
+                transaction_type=category.category_type,
+                description=description,
+                transaction_date=datetime.now().date()
+            )
+            sess.add(transaction)
+            sess.commit()
+
+            return jsonify({
+                'success': True,
+                'message': 'Transaction added',
+                'transaction': transaction.to_dict()
+            }), 201
+
+        except Exception as e:
+            sess.rollback()
+            return jsonify({'error': f'Error adding transaction: {str(e)}'}), 500
+    finally:
+        sess.close()
 
 
 @api_bp.route('/health', methods=['GET'])
