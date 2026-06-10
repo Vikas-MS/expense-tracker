@@ -8,6 +8,7 @@
     {% block extra_css %}{% endblock %}
 </head>
 <body>
+    <div id="notification" class="notification"></div>
     {% if session.get('user_id') %}
         <nav class="sidebar">
             <div class="sidebar-header">
@@ -25,7 +26,6 @@
             </div>
         </nav>
         <main class="main-content">
-            <div id="notification" class="notification"></div>
     {% endif %}
 
     {% block content %}{% endblock %}

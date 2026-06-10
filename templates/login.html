@@ -2,6 +2,57 @@
 
 {% block title %}Login - Personal Expense Tracker{% endblock %}
 
+{% block extra_css %}
+<style>
+    .auth-notification {
+        padding: 1rem 1.5rem;
+        border-radius: 0.5rem;
+        margin-bottom: 1.5rem;
+        font-weight: 500;
+        display: none;
+        animation: slideDown 0.3s ease;
+    }
+    .auth-notification.show {
+        display: block;
+    }
+    .auth-notification.success {
+        background-color: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+    }
+    .auth-notification.error {
+        background-color: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+    }
+    @keyframes slideDown {
+        from { opacity: 0; transform: translateY(-10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .btn-loading {
+        position: relative;
+        pointer-events: none;
+        opacity: 0.8;
+    }
+    .btn-loading::after {
+        content: '';
+        position: absolute;
+        width: 1.1rem;
+        height: 1.1rem;
+        top: 50%;
+        right: 1rem;
+        margin-top: -0.55rem;
+        border: 2px solid rgba(255,255,255,0.3);
+        border-top-color: #fff;
+        border-radius: 50%;
+        animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="auth-container">
     <div class="auth-box">
@@ -10,7 +61,9 @@
             <p>Access your expense tracker</p>
         </div>
 
-        <form id="loginForm" onsubmit="handleLogin(event)">
+        <div id="loginNotification" class="auth-notification"></div>
+
+        <form id="loginForm">
             <div class="form-group">
                 <label for="username">Username</label>
                 <input type="text" id="username" name="username" required placeholder="Enter your username">
@@ -21,7 +74,7 @@
                 <input type="password" id="password" name="password" required placeholder="Enter your password">
             </div>
 
-            <button type="submit" class="btn btn-primary btn-block">Sign In</button>
+            <button type="submit" id="loginBtn" class="btn btn-primary btn-block">Sign In</button>
         </form>
 
         <div class="auth-footer">
@@ -32,29 +85,74 @@
 </div>
 
 <script>
-function handleLogin(event) {
-    event.preventDefault();
-    const formData = new FormData(document.getElementById('loginForm'));
+(function() {
+    const form = document.getElementById('loginForm');
+    const btn = document.getElementById('loginBtn');
+    const notif = document.getElementById('loginNotification');
 
-    fetch('{{ url_for("auth.login") }}', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showNotification(data.message, 'success');
-            setTimeout(() => {
-                window.location.href = '{{ url_for("dashboard.index") }}';
-            }, 500);
+    function showMsg(message, type) {
+        notif.textContent = message;
+        notif.className = 'auth-notification show ' + type;
+    }
+
+    function setLoading(loading) {
+        if (loading) {
+            btn.classList.add('btn-loading');
+            btn.textContent = 'Signing in...';
+            btn.disabled = true;
         } else {
-            showNotification(data.error, 'error');
+            btn.classList.remove('btn-loading');
+            btn.textContent = 'Sign In';
+            btn.disabled = false;
         }
-    })
-    .catch(error => {
-        showNotification('An error occurred', 'error');
-        console.error('Error:', error);
+    }
+
+    form.addEventListener('submit', function(event) {
+        event.preventDefault();
+        notif.className = 'auth-notification';
+
+        const username = document.getElementById('username').value.trim();
+        const password = document.getElementById('password').value;
+
+        if (!username || !password) {
+            showMsg('Please enter both username and password.', 'error');
+            return;
+        }
+
+        setLoading(true);
+        console.log('[Login] Submitting for user:', username);
+
+        const formData = new FormData(form);
+
+        fetch('{{ url_for("auth.login") }}', {
+            method: 'POST',
+            body: formData
+        })
+        .then(function(response) {
+            console.log('[Login] Response status:', response.status);
+            return response.json().then(function(data) {
+                return { status: response.status, data: data };
+            });
+        })
+        .then(function(result) {
+            console.log('[Login] Response data:', result.data);
+            setLoading(false);
+
+            if (result.data.success) {
+                showMsg(result.data.message || 'Login successful! Redirecting...', 'success');
+                setTimeout(function() {
+                    window.location.href = '{{ url_for("dashboard.index") }}';
+                }, 600);
+            } else {
+                showMsg(result.data.error || 'Login failed. Please try again.', 'error');
+            }
+        })
+        .catch(function(error) {
+            console.error('[Login] Error:', error);
+            setLoading(false);
+            showMsg('A network error occurred. Please try again.', 'error');
+        });
     });
-}
+})();
 </script>
 {% endblock %}
