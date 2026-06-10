@@ -1,9 +1,13 @@
-from flask import Blueprint, render_template, request, redirect, url_for, session, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, session, jsonify, send_from_directory
 from models import User, Transaction, Category
 from db import get_session
 from datetime import datetime
 from functools import wraps
+from utils.bills import (
+    save_bill, delete_bill_file, apply_bill_data, clear_bill_data, get_user_bill_dir
+)
 import math
+import os
 
 transactions_bp = Blueprint('transactions', __name__)
 
@@ -142,6 +146,8 @@ def add_transaction():
             except ValueError:
                 return jsonify({'error': 'Invalid date format'}), 400
 
+            bill_file = request.files.get('bill')
+
             # Create transaction
             transaction = Transaction(
                 user_id=user.id,
@@ -153,6 +159,17 @@ def add_transaction():
             )
 
             db_s.add(transaction)
+            db_s.flush()
+
+            if bill_file and bill_file.filename:
+                try:
+                    bill_data = save_bill(bill_file, user.id)
+                    apply_bill_data(transaction, bill_data)
+                except ValueError as e:
+                    db_s.rollback()
+                    db_s.close()
+                    return jsonify({'error': str(e)}), 400
+
             db_s.commit()
 
             try:
@@ -235,6 +252,23 @@ def edit_transaction(transaction_id):
             transaction.description = description
             transaction.transaction_date = parsed_date
 
+            remove_bill = request.form.get('remove_bill') == 'true'
+            bill_file = request.files.get('bill')
+
+            if remove_bill and transaction.bill_filename:
+                delete_bill_file(user.id, transaction.bill_filename)
+                clear_bill_data(transaction)
+            elif bill_file and bill_file.filename:
+                try:
+                    if transaction.bill_filename:
+                        delete_bill_file(user.id, transaction.bill_filename)
+                    bill_data = save_bill(bill_file, user.id)
+                    apply_bill_data(transaction, bill_data)
+                except ValueError as e:
+                    db_s.rollback()
+                    db_s.close()
+                    return jsonify({'error': str(e)}), 400
+
             try:
                 db_s.commit()
                 return jsonify({
@@ -275,11 +309,46 @@ def delete_transaction(transaction_id):
         return jsonify({'error': 'Transaction not found'}), 404
 
     try:
+        if transaction.bill_filename:
+            delete_bill_file(user.id, transaction.bill_filename)
         db_s.delete(transaction)
         db_s.commit()
         return jsonify({'success': True, 'message': 'Transaction deleted successfully'}), 200
     except Exception as e:
         db_s.rollback()
         return jsonify({'error': f'Error deleting transaction: {str(e)}'}), 500
+    finally:
+        db_s.close()
+
+
+@transactions_bp.route('/<transaction_id>/bill', methods=['GET'])
+@login_required
+def view_bill(transaction_id):
+    """View or download a transaction bill attachment."""
+    db_s = get_session()
+    try:
+        user = db_s.get(User, session['user_id'])
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        transaction = db_s.query(Transaction).filter(
+            Transaction.id == transaction_id, Transaction.user_id == user.id
+        ).first()
+        if not transaction or not transaction.bill_filename:
+            return jsonify({'error': 'Bill not found'}), 404
+
+        bill_dir = get_user_bill_dir(user.id)
+        filepath = os.path.join(bill_dir, transaction.bill_filename)
+        if not os.path.exists(filepath):
+            return jsonify({'error': 'Bill file not found'}), 404
+
+        download = request.args.get('download') == '1'
+        return send_from_directory(
+            bill_dir,
+            transaction.bill_filename,
+            mimetype=transaction.bill_mime_type,
+            as_attachment=download,
+            download_name=transaction.bill_original_name or transaction.bill_filename,
+        )
     finally:
         db_s.close()

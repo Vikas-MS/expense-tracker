@@ -45,6 +45,7 @@
                     <div class="col col-description">Description</div>
                     <div class="col col-type">Type</div>
                     <div class="col col-amount">Amount</div>
+                    <div class="col col-bill">Bill</div>
                     <div class="col col-actions">Actions</div>
                 </div>
 
@@ -58,10 +59,17 @@
                             {{ transaction.transaction_type|title }}
                         </span>
                     </div>
-                    <div class="col col-amount {% if transaction.transaction_type == 'income' %}text-income{% else %}text-expense{% endif %}">
+                    <div class="col col-amount {% if transaction.transaction_type == 'income' %}text-income{% else %}text-expense{% endif %}" data-label="Amount">
                         {% if transaction.transaction_type == 'income' %}+{% else %}-{% endif %} ${{ "%.2f"|format(transaction.amount) }}
                     </div>
-                    <div class="col col-actions">
+                    <div class="col col-bill" data-label="Bill">
+                        {% if transaction.has_bill %}
+                        <a href="{{ url_for('transactions.view_bill', transaction_id=transaction.id) }}" class="bill-link" target="_blank" rel="noopener" title="{{ transaction.bill_original_name or 'View bill' }}">📎</a>
+                        {% else %}
+                        -
+                        {% endif %}
+                    </div>
+                    <div class="col col-actions" data-label="Actions">
                         <a href="{{ url_for('transactions.edit_transaction', transaction_id=transaction.id) }}" class="action-link">Edit</a>
                         <button onclick="deleteTransaction('{{ transaction.id }}')" class="action-link delete">Delete</button>
                     </div>

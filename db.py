@@ -39,3 +39,29 @@ def create_all():
         pass
 
     Base.metadata.create_all(bind=engine)
+    migrate_schema()
+
+
+def migrate_schema():
+    """Add new columns to existing tables when the schema evolves."""
+    if engine is None:
+        return
+
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(engine)
+    if 'transactions' not in inspector.get_table_names():
+        return
+
+    columns = {col['name'] for col in inspector.get_columns('transactions')}
+    new_columns = [
+        ('bill_filename', 'VARCHAR(255)'),
+        ('bill_original_name', 'VARCHAR(255)'),
+        ('bill_mime_type', 'VARCHAR(100)'),
+        ('bill_size', 'INTEGER'),
+    ]
+
+    with engine.begin() as conn:
+        for col_name, col_type in new_columns:
+            if col_name not in columns:
+                conn.execute(text(f'ALTER TABLE transactions ADD COLUMN {col_name} {col_type}'))

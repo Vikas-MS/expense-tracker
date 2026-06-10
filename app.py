@@ -6,10 +6,15 @@ import db as database
 def create_app(config_name=None):
     """Application factory function."""
     app = Flask(__name__)
+    base_dir = os.path.abspath(os.path.dirname(__file__))
 
     # Configuration
     if config_name is None:
         config_name = os.getenv('FLASK_ENV', 'development')
+
+    app.config['UPLOAD_FOLDER'] = os.path.join(base_dir, 'uploads', 'bills')
+    app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
+    app.config['ALLOWED_BILL_EXTENSIONS'] = {'pdf', 'png', 'jpg', 'jpeg', 'webp'}
 
     if config_name == 'production':
         app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///expense_tracker.db')
@@ -20,7 +25,6 @@ def create_app(config_name=None):
         app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
     else:
         # Development configuration
-        base_dir = os.path.abspath(os.path.dirname(__file__))
         app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{base_dir}/database/expense_tracker.db'
         app.config['SECRET_KEY'] = 'dev-secret-key-change-in-production'
         app.config['SESSION_COOKIE_SECURE'] = False
@@ -60,6 +64,7 @@ def create_app(config_name=None):
 
         # Create tables using SQLAlchemy metadata
         database.create_all()
+        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
         # Initialize default categories
         init_default_categories()

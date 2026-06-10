@@ -51,6 +51,23 @@
                 <textarea id="description" name="description" rows="4" placeholder="Add notes about this transaction">{{ transaction.description or '' }}</textarea>
             </div>
 
+            <div class="form-group">
+                <label for="bill">Attach Bill (Optional)</label>
+                {% if transaction.has_bill %}
+                <div class="current-bill">
+                    <a href="{{ url_for('transactions.view_bill', transaction_id=transaction.id) }}" target="_blank" rel="noopener">
+                        {{ transaction.bill_original_name or 'View bill' }}
+                    </a>
+                    <label class="remove-bill-label">
+                        <input type="checkbox" id="remove_bill" name="remove_bill" value="true">
+                        Remove bill
+                    </label>
+                </div>
+                {% endif %}
+                <input type="file" id="bill" name="bill" accept=".pdf,image/*">
+                <small>PDF or image up to 5 MB{% if transaction.has_bill %}. Upload a new file to replace the current bill.{% endif %}</small>
+            </div>
+
             <div class="form-actions">
                 <button type="submit" class="btn btn-primary">Update Transaction</button>
                 <a href="{{ url_for('transactions.list_transactions') }}" class="btn btn-secondary">Cancel</a>

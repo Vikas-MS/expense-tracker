@@ -590,7 +590,7 @@ small {
 .table-header,
 .table-row {
     display: grid;
-    grid-template-columns: 100px 150px 200px 100px 100px 100px;
+    grid-template-columns: 100px 150px 200px 100px 100px 60px 100px;
     gap: 1rem;
     align-items: center;
     padding: 1rem;
@@ -621,7 +621,29 @@ small {
 .col-description { }
 .col-type { text-align: center; }
 .col-amount { text-align: right; }
+.col-bill { text-align: center; }
 .col-actions { text-align: center; }
+
+.bill-link {
+    text-decoration: none;
+    font-size: 1.1rem;
+}
+
+.current-bill {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.remove-bill-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.9rem;
+    color: var(--danger);
+}
 
 .action-link {
     color: var(--primary);
@@ -901,7 +923,7 @@ small {
 
     .table-header,
     .table-row {
-        grid-template-columns: 80px 130px 150px 80px 80px 70px;
+        grid-template-columns: 80px 130px 150px 80px 80px 50px 70px;
     }
 }
 

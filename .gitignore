@@ -54,6 +54,9 @@ instance/
 # Exports
 exports/
 
+# Uploaded bills
+uploads/
+
 # Logs
 *.log
 logs/

@@ -121,6 +121,12 @@
                 <textarea id="description" name="description" rows="4" placeholder="Add notes about this transaction"></textarea>
             </div>
 
+            <div class="form-group">
+                <label for="bill">Attach Bill (Optional)</label>
+                <input type="file" id="bill" name="bill" accept=".pdf,image/*">
+                <small>PDF or image up to 5 MB</small>
+            </div>
+
             <div class="form-actions">
                 <button type="submit" class="btn btn-primary">Add Transaction</button>
                 <a href="{{ url_for('transactions.list_transactions') }}" class="btn btn-secondary">Cancel</a>
@@ -302,6 +308,11 @@ async function handleAddTransaction(event) {
     formData.append('type', type);
     formData.append('description', description);
     formData.append('transaction_date', transactionDate);
+
+    const billInput = document.getElementById('bill');
+    if (billInput.files.length) {
+        formData.append('bill', billInput.files[0]);
+    }
 
     fetch('{{ url_for("transactions.add_transaction") }}', {
         method: 'POST',

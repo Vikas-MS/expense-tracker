@@ -1,6 +1,7 @@
 from sqlalchemy import (
     Column,
     String,
+    Integer,
     Float,
     Date,
     DateTime,
@@ -118,6 +119,14 @@ class Transaction(Base):
     transaction_date = Column(Date, nullable=False, index=True, default=datetime.utcnow)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    bill_filename = Column(String(255))
+    bill_original_name = Column(String(255))
+    bill_mime_type = Column(String(100))
+    bill_size = Column(Integer)
+
+    @property
+    def has_bill(self):
+        return bool(self.bill_filename)
 
     def to_dict(self):
         return {
@@ -129,4 +138,6 @@ class Transaction(Base):
             'description': self.description,
             'transaction_date': self.transaction_date.isoformat() if self.transaction_date else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
+            'has_bill': self.has_bill,
+            'bill_original_name': self.bill_original_name,
         }
