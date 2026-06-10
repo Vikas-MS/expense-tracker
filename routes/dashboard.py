@@ -71,6 +71,11 @@ def index():
             for row in raw_expenses
         ]
 
+        # Get all user categories for the quick-add modal dropdown
+        all_categories = db_s.query(Category).filter(
+            Category.user_id == user.id
+        ).order_by(Category.category_type, Category.category_name).all()
+
         # Prepare dashboard data
         dashboard_data = {
             'total_income': total_income,
@@ -81,6 +86,7 @@ def index():
             'monthly_balance': monthly_balance,
             'recent_transactions': recent_transactions,
             'expenses_by_category': expenses_by_category,
+            'all_categories': all_categories,
             'today': today.strftime('%B %d, %Y')
         }
 

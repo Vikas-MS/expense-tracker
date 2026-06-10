@@ -104,11 +104,16 @@
                 <label for="qCategory">Category</label>
                 <select id="qCategory" required>
                     <option value="">Select a category</option>
-                    {% for category in expenses_by_category %}
-                        {% if category[0] %}
-                        <option value="{{ category[2] }}">{{ category[0] }}</option>
-                        {% endif %}
+                    <optgroup label="Expense">
+                    {% for category in all_categories if category.category_type == 'expense' %}
+                        <option value="{{ category.id }}">{{ category.category_name }}</option>
                     {% endfor %}
+                    </optgroup>
+                    <optgroup label="Income">
+                    {% for category in all_categories if category.category_type == 'income' %}
+                        <option value="{{ category.id }}">{{ category.category_name }}</option>
+                    {% endfor %}
+                    </optgroup>
                 </select>
             </div>
 
