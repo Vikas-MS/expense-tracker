@@ -15,7 +15,7 @@ function showNotification(message, type = 'info') {
 function logout() {
     if (!confirm('Are you sure you want to logout?')) return;
 
-    fetch('{{ url_for("auth.logout") }}', {
+    fetch('/auth/logout', {
         method: 'POST'
     })
     .then(response => response.json())
@@ -23,7 +23,7 @@ function logout() {
         if (data.success) {
             showNotification(data.message, 'success');
             setTimeout(() => {
-                window.location.href = '{{ url_for("auth.landing") }}';
+                window.location.href = '/auth/';
             }, 500);
         }
     })
@@ -112,7 +112,7 @@ async function apiRequest(url, options = {}) {
 
 // Get user categories
 async function getUserCategories(type = '') {
-    let url = '{{ url_for("api.get_categories") }}';
+    let url = '/api/categories';
     if (type) {
         url += `?type=${type}`;
     }
@@ -121,7 +121,7 @@ async function getUserCategories(type = '') {
 
 // Create new category
 async function createCategory(name, type, color) {
-    return apiRequest('{{ url_for("api.create_category") }}', {
+    return apiRequest('/api/categories', {
         method: 'POST',
         body: JSON.stringify({
             category_name: name,
@@ -133,7 +133,7 @@ async function createCategory(name, type, color) {
 
 // Update category
 async function updateCategory(categoryId, updates) {
-    return apiRequest(`{{ url_for("api.update_category", category_id="") }}${categoryId}`, {
+    return apiRequest(`/api/categories/${categoryId}`, {
         method: 'PUT',
         body: JSON.stringify(updates)
     });
@@ -141,24 +141,24 @@ async function updateCategory(categoryId, updates) {
 
 // Delete category
 async function deleteCategory(categoryId) {
-    return apiRequest(`{{ url_for("api.delete_category", category_id="") }}${categoryId}`, {
+    return apiRequest(`/api/categories/${categoryId}`, {
         method: 'DELETE'
     });
 }
 
 // Get dashboard stats
 async function getDashboardStats() {
-    return apiRequest('{{ url_for("api.get_dashboard_stats") }}');
+    return apiRequest('/api/dashboard/stats');
 }
 
 // Get recent transactions
 async function getRecentTransactions(limit = 10) {
-    return apiRequest(`{{ url_for("api.get_recent_transactions") }}?limit=${limit}`);
+    return apiRequest(`/api/dashboard/recent?limit=${limit}`);
 }
 
 // Quick add transaction
 async function quickAddTransaction(amount, categoryId, description = '') {
-    return apiRequest('{{ url_for("api.quick_add_transaction") }}', {
+    return apiRequest('/api/transactions/quick', {
         method: 'POST',
         body: JSON.stringify({
             amount: amount,
@@ -239,7 +239,7 @@ if ('serviceWorker' in navigator) {
 
 // Keep session alive (ping server every 5 minutes)
 function keepSessionAlive() {
-    fetch('{{ url_for("api.health_check") }}')
+    fetch('/api/health')
         .catch(error => console.log('Session check failed:', error));
 }
 
