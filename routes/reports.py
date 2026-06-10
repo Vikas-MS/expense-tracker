@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, session, redirect, url_for, jsonify
+from flask import Blueprint, render_template, request, session, redirect, url_for, jsonify, Response
 from models import User, Transaction, Category
 from db import get_session
 from sqlalchemy import func
@@ -192,11 +192,13 @@ def export_csv():
             csv_content = output.getvalue()
             filename = f'expense-report-{datetime.now().strftime("%Y-%m-%d")}.csv'
 
-            return jsonify({
-                'success': True,
-                'csv': csv_content,
-                'filename': filename
-            }), 200
+            return Response(
+                csv_content,
+                mimetype='text/csv',
+                headers={
+                    'Content-Disposition': f'attachment; filename="{filename}"'
+                }
+            )
 
         except Exception as e:
             return jsonify({'error': f'Error exporting data: {str(e)}'}), 500
