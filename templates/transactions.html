@@ -111,21 +111,27 @@
 function deleteTransaction(transactionId) {
     if (!confirm('Are you sure you want to delete this transaction?')) return;
 
-    fetch(`{{ url_for('transactions.delete_transaction', transaction_id='') }}${transactionId}`, {
+    console.log('[Delete] Deleting transaction:', transactionId);
+
+    fetch(`/transactions/${transactionId}/delete`, {
         method: 'POST'
     })
-    .then(response => response.json())
+    .then(response => {
+        console.log('[Delete] Response status:', response.status);
+        return response.json();
+    })
     .then(data => {
+        console.log('[Delete] Response data:', data);
         if (data.success) {
             showNotification(data.message, 'success');
             setTimeout(() => location.reload(), 500);
         } else {
-            showNotification(data.error, 'error');
+            showNotification(data.error || 'Failed to delete transaction', 'error');
         }
     })
     .catch(error => {
-        showNotification('An error occurred', 'error');
-        console.error('Error:', error);
+        console.error('[Delete] Error:', error);
+        showNotification('An error occurred while deleting', 'error');
     });
 }
 </script>
